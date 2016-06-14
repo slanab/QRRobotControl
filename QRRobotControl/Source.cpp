@@ -52,7 +52,6 @@ int ConnectToHost(int PortNo, char* IPAddress)
 
 	//Fill out the information needed to initialize a socket…
 	SOCKADDR_IN target; //Socket address information
-
 	target.sin_family = AF_INET; // address family Internet
 	target.sin_port = htons(PortNo); //Port to connect on
 	target.sin_addr.s_addr = inet_addr(IPAddress); //Target IP
@@ -87,10 +86,15 @@ void CloseConnection()
 
 void performCommand(string command) {
 	if (command != "") {
-		cout << "Command to be performed " << command << endl;
-	}
-	else {
-		
+		cout << "Command to be performed " << command << endl;		
+		send(s, command.data(), 13, 0);		
+		int iResult;
+		int buffer_len = 200;
+		char  buffer[200];
+		iResult = recv(s, buffer, buffer_len, 0);
+		cout << buffer << '\n';
+	} else {
+		// No command received
 	}
 }
 
@@ -109,34 +113,10 @@ int main(int argc, char* argv[])
 	cout << "Frame size : " << dWidth << " x " << dHeight << endl;
 	namedWindow("MyVideo", CV_WINDOW_AUTOSIZE); //create a window called "MyVideo"
 
-	if (ConnectToHost(port_num, IP_ADD))
+	if (!ConnectToHost(port_num, IP_ADD))
 	{
-		int i = 0;
-		int iResult;
-		int buffer_len = 200;
-		char  buffer[200];
-		
-		iResult = recv(s, buffer, buffer_len, 0);
-		std::cout << buffer << '\n';
-
-		iResult = recv(s, buffer, buffer_len, 0);
-		std::cout << buffer << '\n';
-
-		iResult = recv(s, buffer, buffer_len, 0);
-		std::cout << buffer << '\n';
-		//Sleep (4);
-		iResult = send(s, "nudge left \n", 12, 0);
-		//iResult= shutdown(s,SD_SEND);
-		//Sleep (4);
-		iResult = recv(s, buffer, buffer_len, 0);
-		std::cout << buffer << '\n';
-		iResult = recv(s, buffer, buffer_len, 0);
-		std::cout << buffer << '\n';
-		iResult = recv(s, buffer, buffer_len, 0);
-		std::cout << buffer << '\n';
-		iResult = send(s, "nudge right \n", 13, 0);
-	}
-	CloseConnection();
+		return 0;
+	}	
 
 	// Processing the frames for the QR codes
 	ImageScanner scanner;
@@ -180,5 +160,6 @@ int main(int argc, char* argv[])
 			break;
 		}
 	}
+	CloseConnection();
 	return 0;
 }
