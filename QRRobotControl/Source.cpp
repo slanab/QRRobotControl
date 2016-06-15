@@ -78,24 +78,22 @@ int ConnectToHost(int PortNo, char* IPAddress)
 void CloseConnection()
 {
 	//Close the socket if it exists
-	if (s)
+	if (s) {
 		closesocket(s);
-
+	}
 	WSACleanup(); //Clean up Winsock
 }
 
-void performCommand(string command) {
-	if (command != "") {
-		cout << "Command to be performed " << command << endl;		
-		send(s, command.data(), 13, 0);		
-		int iResult;
-		int buffer_len = 200;
-		char  buffer[200];
-		iResult = recv(s, buffer, buffer_len, 0);
-		cout << buffer << '\n';
-	} else {
-		// No command received
-	}
+void performCommand(string command) 
+{	
+	int iResult;
+	char  buffer[200];
+	string response;
+	cout << "Command to be performed:\n" << command << endl;		
+	send(s, command.data(), command.length(), 0);		
+	iResult = recv(s, buffer, sizeof(buffer), 0);
+	response.append(buffer, buffer + iResult);
+	cout << "Response received:\n" << response << endl;
 }
 
 int main(int argc, char* argv[])
@@ -113,9 +111,12 @@ int main(int argc, char* argv[])
 	cout << "Frame size : " << dWidth << " x " << dHeight << endl;
 	namedWindow("MyVideo", CV_WINDOW_AUTOSIZE); //create a window called "MyVideo"
 
+	// Establishing socket connection
 	if (!ConnectToHost(port_num, IP_ADD))
 	{
-		return 0;
+		cout << "Cannot connect to the host" << endl;
+		cin >> filename;
+		return -1;
 	}	
 
 	// Processing the frames for the QR codes
@@ -151,9 +152,11 @@ int main(int argc, char* argv[])
 				vp.push_back(Point(symbol->get_location_x(i), symbol->get_location_y(i)));
 			}
 		}
-		putText(frame, command, cvPoint(10, 100), FONT_HERSHEY_COMPLEX_SMALL, 4, cvScalar(0, 0, 0), 1, CV_AA);
+		//putText(frame, command, cvPoint(10, 100), FONT_HERSHEY_COMPLEX_SMALL, 4, cvScalar(0, 0, 0), 1, CV_AA);
 		imshow("MyVideo", frame); //show the frame in "MyVideo" window  
-		performCommand(command);
+		if (command != "") {
+			performCommand(command);
+		}
 		if (waitKey(30) == 27) //wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop  
 		{
 			cout << "esc key is pressed by user" << endl;
