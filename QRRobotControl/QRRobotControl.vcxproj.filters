@@ -21,10 +21,16 @@
     <ClCompile Include="socketConnection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="CommandTelnet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="socketConnection.h">
       <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CommandTelnet.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

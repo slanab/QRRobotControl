@@ -8,6 +8,7 @@
 #include <zbar.h>  
 
 #include "socketConnection.h"
+#include "CommandTelnet.h"
 
 using namespace cv;
 using namespace std;
@@ -17,20 +18,28 @@ int port_num_telnet = 4444;
 char *IP_ADD = "207.23.183.214"; // Robot IP
 string filename = "rtmp://207.23.183.214:1935/oculusPrime/stream1";
 
+void waitForSocketResponse(int responseCycles) {
+	cout << "Wait for " << responseCycles << " cycles\n";
+	for (int i = 0; i < responseCycles; i++) {
+		string response = socketResponse();
+		cout << "Response received:\n**********\n" << response << "**********\n" << endl;
+	}
+}
+
 void performCommand(string commands, int responseCycles) 
 {		
-	cout << "Sending commands: " << commands;
-	// Break down commands into one by one	
-	string command = "";
+	cout << "Sending commands: " << commands << endl;
+	// Multiple commands can be encoded in one QR code, separated by new line sumbols. 
+	// This piece of code separates commands and processes them one by one	
 	stringstream commandStream(commands);
-	while (getline(commandStream, command, '\n')) {
-		cout << "Single command: " << command;
-		command = command + '\n';	// Add new line to the command, else command won't be sent
-		socketSend(command.data(), command.length());
-		for (int i = 0; i < responseCycles; i++) {
-			string response = socketResponse();
-			cout << "Response received:\n**********\n" << response << "**********\n" << endl;
-		}
+	string commandLine;
+	while (getline(commandStream, commandLine, '\n')) {	// Get a single command from the QR code
+		CommandTelnet command(commandLine);		
+		string commandFull = command.getFullCommand();
+		cout << "Single command: " << commandFull;
+		socketSend(commandFull.data(), commandFull.length());
+		// Need to wait for 3-4 cycles (depends on the command) of robot responding for command to complete, otherwise command might not complete
+		waitForSocketResponse(command.getResponseNum());
 	}
 }
 
@@ -43,13 +52,10 @@ int main(int argc, char* argv[])
 		cin.ignore(numeric_limits<streamsize>::max(), '\n');
 		return -1;
 	}	
-	string response;
-	response = socketResponse();
-	response = socketResponse();
+	waitForSocketResponse(2); // Get 2 responses from the socket
 
 	// Obtaining robot's webcam stream	
-	performCommand("publish camera", 2); // 2 responses
-
+	performCommand("publish camera\n", 2); 
 	VideoCapture cap(filename);
 	if (!cap.isOpened())  // if not success, exit program
 	{
@@ -57,6 +63,17 @@ int main(int argc, char* argv[])
 		cin.ignore(numeric_limits<streamsize>::max(), '\n');
 		return -1;
 	}
+
+	// Testing code for the experiment, will go on QR code later
+	performCommand("right 180\nforward 0.1\nleft 90", 4); // QR1
+	//waitForSocketResponse(1);
+	//performCommand("right 90\n forward 1\n", 4); // QR2
+	//waitForSocketResponse(1);
+	//performCommand("backward 1\nleft 90\nforward 3", 4); // QR3
+	//waitForSocketResponse(1);
+	//performCommand("left 90\nforward 4\n", 4); // QR4
+	//waitForSocketResponse(1);
+	//performCommand("strobeflash on\n", 4); // QR5
 
 	// Processing the frames for the QR codes
 	ImageScanner scanner;
