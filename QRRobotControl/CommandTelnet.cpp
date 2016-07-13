@@ -11,22 +11,22 @@ CommandTelnet::~CommandTelnet()
 }
 
 int correctAngle(int angle) {
-	double correction = 1.058;
+	double correction = 1.0;
 	int corrected = angle*correction;
 	return corrected;
 }
 
 int setResponseNum(string commandWord) {
 	if ((commandWord == "left") || (commandWord == "right")) {
-		return 4;
+		return 5;
 	}
 	else if ((commandWord == "forward") || (commandWord == "backward")) {
-		return 3;
+		return 5;
 	}
 	else if (commandWord == "publish") {
 		return 2;
 	}
-	return 4;
+	return 6;
 }
 
 // TODO: Command is properly processed only if it follows "word parameter" structure. Add some error correction.

@@ -20,17 +20,21 @@ string filename = "rtmp://207.23.183.214:1935/oculusPrime/stream1";
 
 void waitForSocketResponse(int responseCycles) {
 	cout << "Wait for " << responseCycles << " cycles\n";
-	for (int i = 0; i < responseCycles; i++) {
+	for (int i = 0; i < responseCycles; i++) { 
 		string response = socketResponse();
 		cout << "Response received:\n**********\n" << response << "**********\n" << endl;
+		int position = response.find("motion stopped");
+		if (position != -1) {
+			cout << "Position of motion " << position << endl;
+			break;
+		}
 	}
 }
 
-void performCommand(string commands, int responseCycles) 
+void performCommand(string commands) 
 {		
 	cout << "Sending commands: " << commands << endl;
-	// Multiple commands can be encoded in one QR code, separated by new line sumbols. 
-	// This piece of code separates commands and processes them one by one	
+	// Multiple commands can be encoded in one QR code, separated by new line sumbols, here commands are processes one by one	
 	stringstream commandStream(commands);
 	string commandLine;
 	while (getline(commandStream, commandLine, '\n')) {	// Get a single command from the QR code
@@ -38,7 +42,7 @@ void performCommand(string commands, int responseCycles)
 		string commandFull = command.getFullCommand();
 		cout << "Single command: " << commandFull;
 		socketSend(commandFull.data(), commandFull.length());
-		// Need to wait for 3-4 cycles (depends on the command) of robot responding for command to complete, otherwise command might not complete
+		// Need to wait for a few cycles (depends on the command) of responses for command to complete, otherwise command might not complete
 		waitForSocketResponse(command.getResponseNum());
 	}
 }
@@ -55,7 +59,7 @@ int main(int argc, char* argv[])
 	waitForSocketResponse(2); // Get 2 responses from the socket
 
 	// Obtaining robot's webcam stream	
-	performCommand("publish camera\n", 2); 
+	performCommand("publish camera\n"); 
 	VideoCapture cap(filename);
 	if (!cap.isOpened())  // if not success, exit program
 	{
@@ -64,20 +68,17 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	// Testing code for the experiment, will go on QR code later
-	performCommand("right 180\nforward 0.1\nleft 90", 4); // QR1
-	//waitForSocketResponse(1);
-	//performCommand("right 90\n forward 1\n", 4); // QR2
-	//waitForSocketResponse(1);
-	//performCommand("backward 1\nleft 90\nforward 3", 4); // QR3
-	//waitForSocketResponse(1);
-	//performCommand("left 90\nforward 4\n", 4); // QR4
-	//waitForSocketResponse(1);
-	//performCommand("strobeflash on\n", 4); // QR5
+	// Testing code for the experiment 
+	//performCommand("backward 0.4\nright 90"); // QR1
+	//performCommand("right 90\n forward 7\n"); // QR2
+	//performCommand("backward 1\nleft 90\nforward 3.5"); // QR3
+	//performCommand("left 90\nforward 5.5\n"); // QR4
+	//performCommand("strobeflash on\n"); // QR5
 
 	// Processing the frames for the QR codes
 	ImageScanner scanner;
-	scanner.set_config(ZBAR_NONE, ZBAR_CFG_ENABLE, 1);		
+	scanner.set_config(ZBAR_NONE, ZBAR_CFG_ENABLE, 1);	
+
 	int cycles = 0;
 	string command = "";
 	string lastCommand = "";
@@ -100,10 +101,29 @@ int main(int argc, char* argv[])
 		uchar *raw = (uchar *)grey.data;
 		Image image(width, height, "Y800", raw, width * height);
 
-		// Scan the image for QR codes   
-		int n = scanner.scan(image);
-		if (n == 0) { // Reset commands if there is no QR code in the frame for 5 cycles (arbitrary value, might need to be adjusted)
-			if (cycles >= 5) { // Wait for 5 cycles, QR code is not detected each cycle
+		/**
+		 * Look for QR codes in the frame, decode if a code is found, and perform decoded command
+		 * If robot sees the same QR code for a while, it will not repeat the same commands while QR code is in the frame.
+		 * However, if QR code is taken away from the frame (ex. robot moves and sees the same command on a different QR code), 
+		 * last command is forgotten so the robot would perform newly seen command even if it is the same as the previos command. 
+		 */
+		int numQRs = scanner.scan(image); // Will return 0 if no QR codes are found
+		if (numQRs) { // Found a QR code in the frame
+			cycles = 0; // Reset number of cycles of seeing no QR
+			// Extract results of QR decoding, perform decoded command
+			for (SymbolIterator symbol = image.symbol_begin(); symbol != image.symbol_end(); ++symbol) {
+				lastCommand = command;
+				command = symbol->get_data();
+				cout << "Decoded command: " << command << endl;
+				cout << "Previous command was: " << lastCommand << endl;
+				if ((command != "") && (command != lastCommand)) {		// Do not repeat the same command over and over while the same QR code is in the camera frame					
+					cout << "Perform command " << command << endl;
+					performCommand(command);
+				}
+			}
+			
+		} else { // No QR detected
+			if (cycles >= 5) { // Reset commands if there is no QR code in the frame for 5 cycles (arbitrary value, might need to be adjusted)
 				if (lastCommand != "" || command != "") {
 					cout << "No QR codes detected for 5 cycles, reset commands\n";
 					lastCommand = "";
@@ -112,21 +132,6 @@ int main(int argc, char* argv[])
 			}
 			else {
 				cycles++; // Increment cycles each time no QR is detected;
-			}
-		}
-		else {
-			cycles = 0; // Reset cycles each time QR code is detected
-		}
-		
-		// Extract results of QR decoding, perform decoded command
-		for (SymbolIterator symbol = image.symbol_begin(); symbol != image.symbol_end(); ++symbol) {
-			lastCommand = command;
-			command = symbol->get_data();
-			cout << "Decoded command: " << command << endl;
-			cout << "Previous command was: " << lastCommand << endl;
-			if ((command != "") && (command != lastCommand)) {		// Ignore repeating the same command over and over while QR code is in the camera frame					
-				cout << "Perform command " << command << endl;
-				performCommand(command, 3);
 			}
 		}
 
