@@ -17,21 +17,28 @@ int correctAngle(int angle) {
 }
 
 int setResponseNum(string commandWord) {
-	if ((commandWord == "left") || (commandWord == "right")) {
-		return 5;
-	}
-	else if ((commandWord == "forward") || (commandWord == "backward")) {
-		return 5;
-	}
-	else if (commandWord == "publish") {
-		return 2;
-	}
-	return 6;
+	return 10;
 }
 
+string setLastResponse(string commandWord, string parameter) {
+	if (commandWord == "publish" && parameter == "camera") {
+		return "streaming camera";
+	}
+	if (commandWord == "odometrystart") {
+		return "motorspeed";
+	}
+	if ((commandWord == "forward") || (commandWord == "backward")) {
+		return "motion stopped";
+	}
+	if ((commandWord == "left") || (commandWord == "right")) {
+		return "direction stop";
+	}
+
+	return "";
+}
 // TODO: Command is properly processed only if it follows "word parameter" structure. Add some error correction.
 CommandTelnet::CommandTelnet(string command) {
-	commandFull = command + '\n'; // Command has to end with a newline symbol to be performed
+	commandFull = command; // Command has to end with a newline symbol to be performed
 	int space = command.find(" ");
 	commandWord = command.substr(0, space); // Command word starts at 0 until the first space	
 	parameter = command.substr(space + 1); // Parameter starts after the space and goes to the end of the command
@@ -42,4 +49,5 @@ CommandTelnet::CommandTelnet(string command) {
 		commandFull = commandWord + " " + parameter + '\n';
 	}	
 	responseNum = setResponseNum(commandWord);
+	lastResponse = setLastResponse(commandWord, parameter);
 }

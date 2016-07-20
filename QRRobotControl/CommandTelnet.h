@@ -19,11 +19,14 @@ public:
 	int getResponseNum() {
 		return responseNum;
 	}
+	string getLastResponse() {
+		return lastResponse;
+	}
 private:
 	string commandFull;
 	string commandWord;
 	string parameter;
 	int responseNum;
-
+	string lastResponse;
 };
 
