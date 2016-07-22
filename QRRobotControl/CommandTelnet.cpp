@@ -1,6 +1,5 @@
 #include "CommandTelnet.h"
 
-
 CommandTelnet::CommandTelnet()
 {
 }
@@ -10,44 +9,72 @@ CommandTelnet::~CommandTelnet()
 {
 }
 
-int correctAngle(int angle) {
-	double correction = 1.0;
-	int corrected = angle*correction;
-	return corrected;
+string CommandTelnet::getCommandFull() {
+	return commandFull;
+}
+string CommandTelnet::getCommandWord() {
+	return commandWord;
+}
+string CommandTelnet::getParameter() {
+	return parameter;
+}
+string CommandTelnet::getLastResponse(){
+	return lastResponse;
+}
+int CommandTelnet::getResponseNum(){
+	return responseNum;
+}
+bool CommandTelnet::isOdometryNeeded(){
+	return expectOdometry;
+}
+int CommandTelnet::getAngle(){
+	return angle;
 }
 
-int setResponseNum(string commandWord) {
-	return 10;
+void CommandTelnet::setResponseNum(int num) {
+	responseNum = num;
+}
+void CommandTelnet::setLastResponse(string response) {
+	lastResponse = response;
 }
 
-string setLastResponse(string commandWord, string parameter) {
+// Sets maximum wait time and response that should be the last useful response depending on the command sent
+void CommandTelnet::setResponseEnd(CommandTelnet& command) {
+	string commandWord = command.getCommandWord();
+	string parameter = command.getParameter();
+	command.responseNum = 10;
+	command.expectOdometry = false;
+	command.angle = 0;
 	if (commandWord == "publish" && parameter == "camera") {
-		return "streaming camera";
+		command.lastResponse = "streaming camera";
+	} else if (commandWord == "odometrystart") {
+		command.lastResponse = "motorspeed";
+	} else if ((commandWord == "forward") || (commandWord == "backward")) {
+		command.lastResponse = "motion stopped";
+		command.expectOdometry = true;
+	} else if ((commandWord == "left") || (commandWord == "right")) {
+		command.lastResponse = "motion stopped";
+		command.expectOdometry = true;
+		command.angle = stoi(parameter);
 	}
-	if (commandWord == "odometrystart") {
-		return "motorspeed";
+	else if (commandWord == "strobeflash") {
+		command.lastResponse = "spotlightbrightness 0";
 	}
-	if ((commandWord == "forward") || (commandWord == "backward")) {
-		return "motion stopped";
-	}
-	if ((commandWord == "left") || (commandWord == "right")) {
-		return "direction stop";
-	}
-
-	return "";
+	else {
+		command.lastResponse = "";		
+	}	
 }
+
+void CommandTelnet::printCommand(CommandTelnet& command) {
+	cout << "Full command is: " << command.commandFull << endl;
+	cout << "Command word is: '" << command.commandWord << "' Parameter is: '" << command.parameter << "' Response to wait for: '" << command.lastResponse << "' Number of responses to wait: '" << command.responseNum << "'\n";
+}
+
 // TODO: Command is properly processed only if it follows "word parameter" structure. Add some error correction.
 CommandTelnet::CommandTelnet(string command) {
-	commandFull = command; // Command has to end with a newline symbol to be performed
+	commandFull = command;
 	int space = command.find(" ");
 	commandWord = command.substr(0, space); // Command word starts at 0 until the first space	
 	parameter = command.substr(space + 1); // Parameter starts after the space and goes to the end of the command
-	// Robot is currently consistently underrotating, need to correct the angle before passing the command to the robot
-	if ((commandWord == "left") || (commandWord == "right")) { 
-		int newAngle = correctAngle(stoi(parameter)); // Convert angle parameter to int and correct it
-		parameter = to_string(newAngle);
-		commandFull = commandWord + " " + parameter + '\n';
-	}	
-	responseNum = setResponseNum(commandWord);
-	lastResponse = setLastResponse(commandWord, parameter);
+	setResponseEnd(*this); 
 }

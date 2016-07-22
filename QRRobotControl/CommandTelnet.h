@@ -10,23 +10,29 @@ public:
 	CommandTelnet();
 	~CommandTelnet();
 	CommandTelnet(string command);
-	string getFullCommand() {
-		return commandFull;
-	}	
-	string getCommandWord(){
-		return commandWord;
-	}
-	int getResponseNum() {
-		return responseNum;
-	}
-	string getLastResponse() {
-		return lastResponse;
-	}
+
+	string getCommandFull();
+	string getCommandWord();
+	string getParameter();	
+	string getLastResponse();
+	int getResponseNum();
+	bool isOdometryNeeded();
+	int getAngle();
+
+	void setResponseNum(int num);
+	void setLastResponse(string response);
+
+	void printCommand(CommandTelnet& command);
+
 private:
 	string commandFull;
 	string commandWord;
-	string parameter;
-	int responseNum;
+	string parameter;	
 	string lastResponse;
+	int responseNum;
+	bool expectOdometry;
+	int angle;
+
+	void setResponseEnd(CommandTelnet &command);
 };
 

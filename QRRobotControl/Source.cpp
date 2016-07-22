@@ -26,6 +26,8 @@ VideoCapture cap;
 Mat frameGlobal;
 bool searchNextQR = false;
 
+void performCommand(string commands);
+
 Mat updateFrame() {
 	Mat frameTemp;
 	bool bSuccess;
@@ -43,14 +45,75 @@ Mat updateFrame() {
 void waitForSocketResponse(CommandTelnet command) {
 	cout << "Wait for " << command.getResponseNum() << " cycles max\n";
 	for (int i = 0; i < command.getResponseNum(); i++) {
-		// TODO: add waiting for gyro data for some commands
 		string response = socketResponse();
 		cout << "Response received:\n**********\n" << response << "**********\n" << endl;
 		if (command.getLastResponse() != "" && response.find(command.getLastResponse()) != -1) {
-			cout << "Found '" << command.getLastResponse() << "' in the response. Done waiting for the response.\n\n\n";
+			cout << "Found '" << command.getLastResponse() << "' in the response. \n";
 			break;
 		}
 	}
+}
+
+void correctAngle(int commandAngle, double realAngle) {	
+	double angleDifference = commandAngle - abs(realAngle);	
+	if (abs(angleDifference) > 3) {
+		cout << "Need to correct angle from " << realAngle << " to " << commandAngle << " Diff " << abs(angleDifference) << endl;		
+		int angle = angleDifference;
+		
+		performCommand("strobeflash on 500 30");
+		// Perform command: go left of rotated too much right, vise versa
+	}
+}
+
+double extractAngle(string response) {
+	stringstream responseStream(response);
+	string responseLine;
+	double realAngle;
+	while (getline(responseStream, responseLine, '\n')) {
+		cout << "Checking line " << responseLine << endl;
+		if (responseLine.find("distanceangle") != -1) {
+			cout << "Found distance angle line, start processing\n";
+			int pos = 0;
+			for (int i = 0; i < 3; i++) {
+				pos = responseLine.find(" ", pos);
+				cout << "Space is at index " << pos << endl;
+				pos++;
+			}
+			cout << "Last space is at index " << pos << endl;
+			realAngle = stod(responseLine.substr(pos));
+			break;
+		}
+	}
+	return realAngle;
+}
+
+void waitForSocketResponseCorrectAngle(CommandTelnet command) {
+	cout << "Called angle correction wait\n";
+	bool isFinalResponseReceived = false;
+	bool isOdometryReceived = false;
+	double realAngle = 0;
+	cout << "Wait for " << command.getResponseNum() << " cycles max\n";
+	for (int i = 0; i < command.getResponseNum(); i++) {
+		string response = socketResponse();
+		cout << "Response received:\n**********\n" << response << "**********\n" << endl;
+		if (command.getLastResponse() != "" && response.find(command.getLastResponse()) != -1) {
+			cout << "Found '" << command.getLastResponse() << "' in the response. \n";
+			if (isOdometryReceived) {
+				break;
+			}
+			cout << "Need to wait for odometry info\n";			
+			isFinalResponseReceived = true;
+		}
+		if (response.find("distanceangle") != -1) {
+			cout << "Odometry received\n";
+			isOdometryReceived = true;
+			realAngle = extractAngle(response);
+			if (isFinalResponseReceived) {
+				break;
+			}
+		}
+	}
+	correctAngle(command.getAngle(), realAngle);	
 }
 
 void waitForSocketResponse(int responseCycles) {
@@ -74,13 +137,17 @@ void performCommand(string commands) {
 	string commandLine;
 	while (getline(commandStream, commandLine, '\n')) {	// Get a single command from the QR code
 		CommandTelnet command(commandLine);		
-		string commandFull = command.getFullCommand();
+		string commandFull = command.getCommandFull();
 		cout << "Single command: " << commandFull << endl; 
 		updateFrame(); 
 		sendCommand(commandFull);
-		waitForSocketResponse(command);
+		if (command.isOdometryNeeded()) {
+			waitForSocketResponseCorrectAngle(command); 
+		}
+		else {
+			waitForSocketResponse(command);
+		}
 	}
-	waitForSocketResponse(1);
 }
 
 int main(int argc, char* argv[])
@@ -107,10 +174,10 @@ int main(int argc, char* argv[])
 	performCommand("odometrystart");
 
 
-	performCommand("forward 1");
+	//performCommand("forward 1");
 	performCommand("left 90");
-	performCommand("right 90");
-	performCommand("backward 1");
+	//performCommand("right 90");
+	//performCommand("backward 1");
 
 	// Testing code for the experiment 	
 	//performCommand("backward 0.4\nright 90"); // QR1
@@ -183,6 +250,6 @@ int main(int argc, char* argv[])
 	}
 	closeConnection();
 	cout << "Press enter to exit";
-	cin.ignore(numeric_limits<streamsize>::max(), '\n');
+	//cin.ignore(numeric_limits<streamsize>::max(), '\n');
 	return 0;
 }
