@@ -26,7 +26,15 @@ VideoCapture cap;
 Mat frameGlobal;
 bool searchNextQR = false;
 
+// Function declarations
+Mat updateFrame();
 void performCommand(string commands);
+void sendCommand(string command);
+void waitForSocketResponse(int responseCycles);
+void waitForSocketResponse(CommandTelnet command);
+void waitForSocketResponseCorrectAngle(CommandTelnet command); 
+void correctAngle(double commandAngle, double realAngle); 
+double extractAngle(string response);
 
 Mat updateFrame() {
 	Mat frameTemp;
@@ -43,25 +51,35 @@ Mat updateFrame() {
 }
 
 void waitForSocketResponse(CommandTelnet command) {
-	cout << "Wait for " << command.getResponseNum() << " cycles max\n";
 	for (int i = 0; i < command.getResponseNum(); i++) {
 		string response = socketResponse();
 		cout << "Response received:\n**********\n" << response << "**********\n" << endl;
 		if (command.getLastResponse() != "" && response.find(command.getLastResponse()) != -1) {
-			cout << "Found '" << command.getLastResponse() << "' in the response. \n";
 			break;
 		}
 	}
 }
 
-void correctAngle(int commandAngle, double realAngle) {	
-	double angleDifference = commandAngle - abs(realAngle);	
-	if (abs(angleDifference) > 3) {
-		cout << "Need to correct angle from " << realAngle << " to " << commandAngle << " Diff " << abs(angleDifference) << endl;		
-		int angle = angleDifference;
-		
-		performCommand("strobeflash on 500 30");
-		// Perform command: go left of rotated too much right, vise versa
+void correctAngle(double commandAngle, double realAngle) {	
+	double angleDifference = commandAngle - realAngle;	
+	cout << "Real angle " << realAngle << " Command angle " << commandAngle << " Diff " << angleDifference << endl;
+	if (abs(angleDifference) > 1) {		
+		int angle = round(angleDifference);
+		if (angle < 0) {
+			cout << "Rotate to the right " << angle << endl;
+			string command = "right " + to_string(abs(angle));
+			cout << "Command to perform is " << command << endl;
+			performCommand(command);
+		}
+		else {
+			cout << "Rotate to the left " << angle << endl;
+			string command = "left " + to_string(abs(angle));
+			cout << "Command to perform is " << command << endl;
+			performCommand(command);
+		}
+	}
+	else {
+		cout << "Difference is too small for correction\n";
 	}
 }
 
@@ -70,17 +88,15 @@ double extractAngle(string response) {
 	string responseLine;
 	double realAngle;
 	while (getline(responseStream, responseLine, '\n')) {
-		cout << "Checking line " << responseLine << endl;
 		if (responseLine.find("distanceangle") != -1) {
-			cout << "Found distance angle line, start processing\n";
 			int pos = 0;
 			for (int i = 0; i < 3; i++) {
 				pos = responseLine.find(" ", pos);
-				cout << "Space is at index " << pos << endl;
 				pos++;
 			}
-			cout << "Last space is at index " << pos << endl;
-			realAngle = stod(responseLine.substr(pos));
+			if (responseLine.at(pos) == '-' || isdigit(responseLine.at(pos))) {
+				realAngle = stod(responseLine.substr(pos));
+			}
 			break;
 		}
 	}
@@ -88,11 +104,10 @@ double extractAngle(string response) {
 }
 
 void waitForSocketResponseCorrectAngle(CommandTelnet command) {
-	cout << "Called angle correction wait\n";
+	cout << "Called angle correction wait for " << command.getCommandFull() << endl;
 	bool isFinalResponseReceived = false;
 	bool isOdometryReceived = false;
 	double realAngle = 0;
-	cout << "Wait for " << command.getResponseNum() << " cycles max\n";
 	for (int i = 0; i < command.getResponseNum(); i++) {
 		string response = socketResponse();
 		cout << "Response received:\n**********\n" << response << "**********\n" << endl;
@@ -113,11 +128,17 @@ void waitForSocketResponseCorrectAngle(CommandTelnet command) {
 			}
 		}
 	}
-	correctAngle(command.getAngle(), realAngle);	
+	double commandAngle = 0;
+	if (command.getCommandWord() == "left") {
+		commandAngle = command.getAngle();
+	}
+	else if (command.getCommandWord() == "right") {
+		commandAngle = 0 - command.getAngle();
+	}
+	correctAngle(commandAngle, realAngle);
 }
 
 void waitForSocketResponse(int responseCycles) {
-	cout << "Wait for " << responseCycles << " cycles\n";
 	for (int i = 0; i < responseCycles; i++) {
 		string response = socketResponse();
 		cout << "Response received:\n**********\n" << response << "**********\n" << endl;
@@ -131,20 +152,20 @@ void sendCommand(string command) {
 
 // Send command and wait for it to be completed. Command completion is determined by responses received from the robot.
 void performCommand(string commands) {		
-	cout << "Sending commands: " << commands << endl;
 	// Multiple commands can be encoded in one QR code, separated by new line sumbols, here commands are processes one by one	
 	stringstream commandStream(commands);
 	string commandLine;
 	while (getline(commandStream, commandLine, '\n')) {	// Get a single command from the QR code
 		CommandTelnet command(commandLine);		
 		string commandFull = command.getCommandFull();
-		cout << "Single command: " << commandFull << endl; 
 		updateFrame(); 
 		sendCommand(commandFull);
 		if (command.isOdometryNeeded()) {
+			cout << "Odometry needed\n";
 			waitForSocketResponseCorrectAngle(command); 
 		}
 		else {
+			cout << "No odometry needed\n";
 			waitForSocketResponse(command);
 		}
 	}
@@ -173,15 +194,14 @@ int main(int argc, char* argv[])
 
 	performCommand("odometrystart");
 
-
 	//performCommand("forward 1");
-	performCommand("left 90");
-	//performCommand("right 90");
+	//performCommand("left 180");
+	//performCommand("right 180");
 	//performCommand("backward 1");
 
 	// Testing code for the experiment 	
 	//performCommand("backward 0.4\nright 90"); // QR1
-	//performCommand("right 90\n forward 7\n"); // QR2
+	//performCommand("right 90\nforward 3\n"); // QR2
 	//performCommand("backward 1\nleft 90\nforward 3.5"); // QR3
 	//performCommand("left 90\nforward 5.5\n"); // QR4
 	//performCommand("strobeflash on\n"); // QR5
