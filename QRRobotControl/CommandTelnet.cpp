@@ -30,6 +30,9 @@ bool CommandTelnet::isOdometryNeeded(){
 int CommandTelnet::getAngle(){
 	return angle;
 }
+double CommandTelnet::getDistance() {
+	return distance;
+}
 
 void CommandTelnet::setResponseNum(int num) {
 	responseNum = num;
@@ -45,6 +48,7 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 	command.responseNum = 10;
 	command.expectOdometry = false;
 	command.angle = 0;
+	command.distance = 0;
 	if (commandWord == "publish" && parameter == "camera") {
 		command.lastResponse = "streaming camera";
 	} else if (commandWord == "odometrystart") {
@@ -52,6 +56,7 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 	} else if ((commandWord == "forward") || (commandWord == "backward")) {
 		command.lastResponse = "motion stopped";
 		command.expectOdometry = true;
+		command.distance = stod(command.parameter);
 	} else if ((commandWord == "left") || (commandWord == "right")) {
 		command.lastResponse = "motion stopped";
 		command.expectOdometry = true;
@@ -78,3 +83,4 @@ CommandTelnet::CommandTelnet(string command) {
 	parameter = command.substr(space + 1); // Parameter starts after the space and goes to the end of the command
 	setResponseEnd(*this); 
 }
+

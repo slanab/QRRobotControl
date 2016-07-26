@@ -18,6 +18,7 @@ public:
 	int getResponseNum();
 	bool isOdometryNeeded();
 	int getAngle();
+	double getDistance();
 
 	void setResponseNum(int num);
 	void setLastResponse(string response);
@@ -32,6 +33,7 @@ private:
 	int responseNum;
 	bool expectOdometry;
 	int angle;
+	double distance;
 
 	void setResponseEnd(CommandTelnet &command);
 };

@@ -28,7 +28,8 @@ bool searchNextQR = false;
 
 // Function declarations
 Mat updateFrame();
-void performCommand(string commands);
+void performCommands(string commands);
+void performSingleCommand(CommandTelnet command);
 void sendCommand(string command);
 void waitForSocketResponse(int responseCycles);
 void waitForSocketResponse(CommandTelnet command);
@@ -69,13 +70,13 @@ void correctAngle(double commandAngle, double realAngle) {
 			cout << "Rotate to the right " << angle << endl;
 			string command = "right " + to_string(abs(angle));
 			cout << "Command to perform is " << command << endl;
-			performCommand(command);
+			performCommands(command);
 		}
 		else {
 			cout << "Rotate to the left " << angle << endl;
 			string command = "left " + to_string(abs(angle));
 			cout << "Command to perform is " << command << endl;
-			performCommand(command);
+			performCommands(command);
 		}
 	}
 	else {
@@ -150,23 +151,41 @@ void sendCommand(string command) {
 	socketSend(command.data(), command.length());
 }
 
+void performSingleCommand(CommandTelnet command) {
+	updateFrame();
+	string commandFull = command.getCommandFull();
+	sendCommand(commandFull);
+	if (command.isOdometryNeeded()) {
+		cout << "Odometry needed\n";
+		waitForSocketResponseCorrectAngle(command);
+	}
+	else {
+		cout << "No odometry needed\n";
+		waitForSocketResponse(command);
+	}
+}
+
 // Send command and wait for it to be completed. Command completion is determined by responses received from the robot.
-void performCommand(string commands) {		
+void performCommands(string commands) {		
 	// Multiple commands can be encoded in one QR code, separated by new line sumbols, here commands are processes one by one	
 	stringstream commandStream(commands);
 	string commandLine;
 	while (getline(commandStream, commandLine, '\n')) {	// Get a single command from the QR code
 		CommandTelnet command(commandLine);		
-		string commandFull = command.getCommandFull();
-		updateFrame(); 
-		sendCommand(commandFull);
-		if (command.isOdometryNeeded()) {
-			cout << "Odometry needed\n";
-			waitForSocketResponseCorrectAngle(command); 
+		if (command.getCommandWord() == "forward" || command.getCommandWord() == "backward") { //Break long distances into smaller movements			
+			double distance = command.getDistance();
+			while (distance > 0) {
+				string commandString = command.getCommandWord() + " 0.5";
+				if (distance < 0.5) {
+					commandString = command.getCommandWord() + " " + to_string(distance);
+				}
+				CommandTelnet shortCommand(commandString);
+				performSingleCommand(shortCommand);
+				distance = distance - 0.5;
+			}
 		}
 		else {
-			cout << "No odometry needed\n";
-			waitForSocketResponse(command);
+			performSingleCommand(command);
 		}
 	}
 }
@@ -183,7 +202,7 @@ int main(int argc, char* argv[])
 	waitForSocketResponse(2); // Get 2 responses from the socket
 
 	// Obtaining robot's webcam stream	
-	performCommand("publish camera"); 	
+	performCommands("publish camera"); 	
 	cap = VideoCapture(filename);
 	if (!cap.isOpened())  // if not success, exit program
 	{
@@ -192,19 +211,9 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	performCommand("odometrystart");
+	performCommands("odometrystart");
 
-	//performCommand("forward 1");
-	//performCommand("left 180");
-	//performCommand("right 180");
-	//performCommand("backward 1");
-
-	// Testing code for the experiment 	
-	//performCommand("backward 0.4\nright 90"); // QR1
-	//performCommand("right 90\nforward 3\n"); // QR2
-	//performCommand("backward 1\nleft 90\nforward 3.5"); // QR3
-	//performCommand("left 90\nforward 5.5\n"); // QR4
-	//performCommand("strobeflash on\n"); // QR5
+	//performCommands("left 90\nforward 3\nbackward 3\nright 90\n");
 
 	// Processing frames for QR codes
 	ImageScanner scanner;
@@ -250,7 +259,7 @@ int main(int argc, char* argv[])
 				cout << "Previous command was: " << lastCommand << endl;
 				if ((command != "") && (command != lastCommand)) {		// Do not repeat the same command over and over while the same QR code is in the camera frame					
 					cout << "Perform command " << command << endl;
-					performCommand(command);
+					performCommands(command);
 					//searchNextQR = true;
 				}
 			}			
@@ -261,7 +270,7 @@ int main(int argc, char* argv[])
 				command = "";
 				//cout << "No qr cycles " << cycles << endl;
 				if (searchNextQR && cycles >= 20) {
-					performCommand("strobeflash on 500 30\nbackward 0.1");
+					performCommands("strobeflash on 500 30\nbackward 0.1");
 					cycles = 0;
 				}
 			}
