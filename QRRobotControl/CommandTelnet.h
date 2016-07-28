@@ -15,21 +15,24 @@ public:
 	string getCommandWord();
 	string getParameter();	
 	string getLastResponse();
+	string getType();
 	int getResponseNum();
 	bool isOdometryNeeded();
 	int getAngle();
 	double getDistance();
 
+	void setCommand(string command);
 	void setResponseNum(int num);
 	void setLastResponse(string response);
 
-	void printCommand(CommandTelnet& command);
+	void printCommand();
 
 private:
 	string commandFull;
 	string commandWord;
 	string parameter;	
 	string lastResponse;
+	string type;
 	int responseNum;
 	bool expectOdometry;
 	int angle;

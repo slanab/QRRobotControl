@@ -21,6 +21,9 @@ string CommandTelnet::getParameter() {
 string CommandTelnet::getLastResponse(){
 	return lastResponse;
 }
+string CommandTelnet::getType(){
+	return type;
+}
 int CommandTelnet::getResponseNum(){
 	return responseNum;
 }
@@ -49,6 +52,7 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 	command.expectOdometry = false;
 	command.angle = 0;
 	command.distance = 0;
+	command.type = "";
 	if (commandWord == "publish" && parameter == "camera") {
 		command.lastResponse = "streaming camera";
 	} else if (commandWord == "odometrystart") {
@@ -57,10 +61,12 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 		command.lastResponse = "motion stopped";
 		command.expectOdometry = true;
 		command.distance = stod(command.parameter);
+		command.type = "motion";
 	} else if ((commandWord == "left") || (commandWord == "right")) {
 		command.lastResponse = "motion stopped";
 		command.expectOdometry = true;
 		command.angle = stoi(parameter);
+		command.type = "motion";
 	}
 	else if (commandWord == "strobeflash") {
 		command.lastResponse = "spotlightbrightness 0";
@@ -70,9 +76,10 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 	}	
 }
 
-void CommandTelnet::printCommand(CommandTelnet& command) {
-	cout << "Full command is: " << command.commandFull << endl;
-	cout << "Command word is: '" << command.commandWord << "' Parameter is: '" << command.parameter << "' Response to wait for: '" << command.lastResponse << "' Number of responses to wait: '" << command.responseNum << "'\n";
+void CommandTelnet::printCommand() {
+	cout << "Full command is: " << this->commandFull << endl;
+	cout << "Command word is: '" << this->commandWord << "' Parameter is: '" << this->parameter << "' Response to wait for: '" << this->lastResponse << "' Number of responses to wait: '" << this->responseNum << "'\n";
+	cout << "Command type is: " << this->type;
 }
 
 // TODO: Command is properly processed only if it follows "word parameter" structure. Add some error correction.
@@ -84,3 +91,10 @@ CommandTelnet::CommandTelnet(string command) {
 	setResponseEnd(*this); 
 }
 
+void CommandTelnet::setCommand(string command) {
+	int space = command.find(" ");
+	commandFull = command + "\n";	
+	commandWord = command.substr(0, space); // Command word starts at 0 until the first space	
+	parameter = command.substr(space + 1); // Parameter starts after the space and goes to the end of the command
+	setResponseEnd(*this);
+}
