@@ -22,7 +22,7 @@ char *IP_ADD = "207.23.183.214"; // Robot IP
 string filename = "rtmp://207.23.183.214:1935/oculusPrime/stream1";
 
 // Global variables
-vector<string> commandBuffer = { "left 180", "right 180"};
+vector<string> commandBuffer = { "forward 1", "backward 1" };
 CommandTelnet currentCommand;
 bool searchNextQR = false;
 bool isCommandComplete = true;
@@ -64,7 +64,7 @@ double extractAngle(string response) {
 
 void correctAngle(double commandAngle, double realAngle) {
 	double angleDifference = commandAngle - realAngle;
-	if (abs(angleDifference) > 3) {
+	if (abs(angleDifference) > 1) {
 		int angle = round(angleDifference);
 		string command = "";
 		if (angle < 0) {
@@ -100,8 +100,8 @@ void checkCommandFinish(string finalResponse) {
 			correctAngle(commandAngle, realAngle);
 		}
 	}
-	cout << "Location " << response.find(finalResponse) << endl;
 	if ((response.find(finalResponse) != -1) && (!waitForAngle)) {
+		//waitForSocketResponse(1);
 		isCommandComplete = true;
 	}
 }
@@ -115,6 +115,21 @@ string processCommand(string command) {
 	cout << "Start on command " << command << endl;
 	currentCommand.setCommand(command);
 	string finalResponse = currentCommand.getLastResponse();	
+
+	if (currentCommand.getCommandWord() == "forward" || currentCommand.getCommandWord() == "backward") {
+		// Break long distance into smaller ones 
+		if (currentCommand.getDistance() > 0.5) {
+			isCommandComplete = true; // Ignore current command, divide into two smaller ones
+			commandBuffer.erase(commandBuffer.begin()); 
+			double distanceLeft = currentCommand.getDistance() - 0.5;
+			string newCommand = currentCommand.getCommandWord() + " " + to_string(distanceLeft);
+			commandBuffer.insert(commandBuffer.begin(), newCommand);
+			newCommand = currentCommand.getCommandWord() + " 0.5";
+			commandBuffer.insert(commandBuffer.begin(), newCommand);					
+			return finalResponse;
+		}
+	}
+
 	if (currentCommand.getType() == "motion") {
 		isAngleReceived = false;
 		cout << "Perform angle correction\n";
@@ -188,6 +203,7 @@ int main(int argc, char* argv[])
 				cout << commandBuffer[it] << ' ';
 			}
 		}
+
 		// Update video frame
 		bSuccess = cap.read(frame); // read a new frame from video  
 		if (!bSuccess) //if not success, break loop  
@@ -206,7 +222,8 @@ int main(int argc, char* argv[])
 					finalResponse = processCommand(commandBuffer[0]);
 				}
 				else { // Only look for QR codes when the robot is done performing all commands and has nothing to do
-					cout << "All commands completed, look for QR codes now\n";
+					//waitForSocketResponse(1);
+					//cout << "All commands completed, look for QR codes now\n";
 					Mat grey;
 					cvtColor(frame, grey, CV_BGR2GRAY);
 					int width = frame.cols;
@@ -214,7 +231,7 @@ int main(int argc, char* argv[])
 					uchar *raw = (uchar *)grey.data;
 					Image image(width, height, "Y800", raw, width * height);
 					int numQRs = scanner.scan(image); // Will return 0 if no QR codes are found
-					cout << "Number of QR found " << numQRs << endl;
+					//cout << "Number of QRs found " << numQRs << endl;
 				}
 			}			
 			i = 0;

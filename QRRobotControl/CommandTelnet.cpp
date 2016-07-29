@@ -68,6 +68,9 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 		command.angle = stoi(parameter);
 		command.type = "motion";
 	}
+	else if ((commandWord == "lefttimed") || (commandWord == "righttimed")) {
+		command.lastResponse = "distanceangle";
+	}
 	else if (commandWord == "strobeflash") {
 		command.lastResponse = "spotlightbrightness 0";
 	}
