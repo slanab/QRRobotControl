@@ -22,7 +22,7 @@ char *IP_ADD = "207.23.183.214"; // Robot IP
 string filename = "rtmp://207.23.183.214:1935/oculusPrime/stream1";
 
 // Global variables
-vector<string> commandBuffer = { "forward 1", "backward 1" };
+vector<string> commandBuffer = { "left 90", "right 90" };
 CommandTelnet currentCommand;
 bool searchNextQR = false;
 bool isCommandComplete = true;
@@ -64,6 +64,7 @@ double extractAngle(string response) {
 
 void correctAngle(double commandAngle, double realAngle) {
 	double angleDifference = commandAngle - realAngle;
+	cout << "Expected angle " << commandAngle << " Real angle " << realAngle << " Angle difference " << angleDifference << endl;
 	if (abs(angleDifference) > 1) {
 		int angle = round(angleDifference);
 		string command = "";
@@ -197,12 +198,6 @@ int main(int argc, char* argv[])
 	string finalResponse = "";
 
 	while (true) { // Wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop  
-		if (!commandBuffer.empty()) {
-			cout << "Vector content: ";
-			for (int it = 0; it < commandBuffer.size(); ++it) {
-				cout << commandBuffer[it] << ' ';
-			}
-		}
 
 		// Update video frame
 		bSuccess = cap.read(frame); // read a new frame from video  
