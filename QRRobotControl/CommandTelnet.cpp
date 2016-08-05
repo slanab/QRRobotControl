@@ -69,7 +69,7 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 		command.type = "motion";
 	}
 	else if ((commandWord == "lefttimed") || (commandWord == "righttimed")) {
-		command.lastResponse = "distanceangle";
+		command.lastResponse = "direction stop";
 	}
 	else if (commandWord == "strobeflash") {
 		command.lastResponse = "spotlightbrightness 0";

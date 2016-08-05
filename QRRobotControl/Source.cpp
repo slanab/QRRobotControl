@@ -24,15 +24,19 @@ string filename = "rtmp://207.23.183.214:1935/oculusPrime/stream1";
 // Global variables
 vector<string> commandBuffer = { "left 90", "right 90" };
 CommandTelnet currentCommand;
+double coefficient = 1;
 bool searchNextQR = false;
 bool isCommandComplete = true;
-bool isAngleReceived = false;
+bool isFinalRecevied = false;
+bool waitForAngle = false;
 
 // Function declarations
+string waitForSocketResponse(int responseCycles);
 void sendCommand(string command);
 void correctAngle(double commandAngle, double realAngle); 
 double extractAngle(string response);
 
+// *** Socket access ***
 string waitForSocketResponse(int responseCycles) {
 	string response;
 	for (int i = 0; i < responseCycles; i++) {
@@ -42,10 +46,24 @@ string waitForSocketResponse(int responseCycles) {
 	return response;
 }
 
+void sendCommand(string command) {
+	cout << "!!!!!!!!!! Sending command to the robot " << command << endl;
+	command = command + '\n';
+	socketSend(command.data(), command.length());
+}
+// *********************
+
+void printVector() {
+	cout << "Vector: \n";
+	for (int i = 0; i < commandBuffer.size(); i++) {
+		cout << commandBuffer.at(i) << endl;
+	}
+}
+
 double extractAngle(string response) {
 	stringstream responseStream(response);
 	string responseLine;
-	double realAngle;
+	double realAngle = 0;;
 	while (getline(responseStream, responseLine, '\n')) {
 		if (responseLine.find("distanceangle") != -1) {
 			int pos = 0;
@@ -62,10 +80,31 @@ double extractAngle(string response) {
 	return realAngle;
 }
 
+void calibrateAngle() {
+	string response;
+	double realAngle = 0;
+	double totalAngle = 0;
+	for (int j = 0; j < 4; j++) {
+		sendCommand("left 90");
+		for (int i = 0; i < 10; i++) {
+			response = waitForSocketResponse(1);
+			if (response.find("distanceangle 0") != -1) {
+				realAngle = extractAngle(response);
+				totalAngle = totalAngle + extractAngle(response);
+				break;
+			}
+		}
+		cout << "Sent angle 90, moved by " << realAngle << endl;
+	}
+	double averageAngle = totalAngle / 4;
+	coefficient = 90.0 / averageAngle;
+	cout << "Average angle is " << averageAngle << " so coefficient is " << coefficient << endl;
+}
+
 void correctAngle(double commandAngle, double realAngle) {
 	double angleDifference = commandAngle - realAngle;
 	cout << "Expected angle " << commandAngle << " Real angle " << realAngle << " Angle difference " << angleDifference << endl;
-	if (abs(angleDifference) > 1) {
+	if (abs(angleDifference) > 7) {
 		int angle = round(angleDifference);
 		string command = "";
 		if (angle < 0) {
@@ -82,13 +121,12 @@ void correctAngle(double commandAngle, double realAngle) {
 	}
 }
 
-void checkCommandFinish(string finalResponse) {
-	bool waitForAngle = false;
+bool checkCommandFinish(string finalResponse) {	
+	cout << "Checking if command is complete\n";
 	string response = waitForSocketResponse(1);
-	if (currentCommand.getType() == "motion") {		
-		waitForAngle = true;
+	if (waitForAngle) {				
 		if (response.find("distanceangle") != -1) {
-			isAngleReceived = true;
+			cout << "Found angle response\n";
 			waitForAngle = false;
 			double realAngle = extractAngle(response);
 			double commandAngle = 0; // Stays 0 if motion is FW or BW
@@ -101,66 +139,81 @@ void checkCommandFinish(string finalResponse) {
 			correctAngle(commandAngle, realAngle);
 		}
 	}
-	if ((response.find(finalResponse) != -1) && (!waitForAngle)) {
-		//waitForSocketResponse(1);
+	if (response.find(finalResponse) != -1) {
+		cout << "Found final response\n";
+		isFinalRecevied = true;		
+	}
+
+	if (isFinalRecevied && !waitForAngle) { // Command is considered finished when final response is recevied and we don't need to wait for odometry angle anymore
 		isCommandComplete = true;
+		return true;
 	}
+	return false;
 }
 
-void sendCommand(string command) {
-	command = command + '\n';
-	socketSend(command.data(), command.length());
-}
-
-string processCommand(string command) {
-	cout << "Start on command " << command << endl;
-	currentCommand.setCommand(command);
-	string finalResponse = currentCommand.getLastResponse();	
-
-	if (currentCommand.getCommandWord() == "forward" || currentCommand.getCommandWord() == "backward") {
-		// Break long distance into smaller ones 
-		if (currentCommand.getDistance() > 0.5) {
-			isCommandComplete = true; // Ignore current command, divide into two smaller ones
-			commandBuffer.erase(commandBuffer.begin()); 
-			double distanceLeft = currentCommand.getDistance() - 0.5;
-			string newCommand = currentCommand.getCommandWord() + " " + to_string(distanceLeft);
-			commandBuffer.insert(commandBuffer.begin(), newCommand);
-			newCommand = currentCommand.getCommandWord() + " 0.5";
-			commandBuffer.insert(commandBuffer.begin(), newCommand);					
-			return finalResponse;
-		}
-	}
-
-	if (currentCommand.getType() == "motion") {
-		isAngleReceived = false;
-		cout << "Perform angle correction\n";
-		sendCommand(currentCommand.getCommandFull());
-	}
-	else {
-		sendCommand(currentCommand.getCommandFull());
-	}
-	commandBuffer.erase(commandBuffer.begin());
-	isCommandComplete = false;	
-	return finalResponse;
-}
-
-// Sendd command to the robot and waits for an appropriate response indicating that the command is complete.
-void completeCommand(string commandLine) {
+// Send first command in the buffer to the robot and set up global variables to track progress. Do not wait for completion
+void startNextCommand() {
 	isCommandComplete = false;
-	cout << "Prforming command" << commandLine;
-	int it = 0;
+	isFinalRecevied = false;
+	string commandLine = commandBuffer[0];
+	cout << "Prforming command " << commandLine << endl;
 	currentCommand.setCommand(commandLine);
 	sendCommand(currentCommand.getCommandFull());
-	while (!isCommandComplete) {
-		cout << "Wait for " << currentCommand.getLastResponse() << endl;
-		checkCommandFinish(currentCommand.getLastResponse());
-		it++;
-		if (it >= 10) {
-			cout << "Command timedout\n";
-			break;
-		}
+	commandBuffer.erase(commandBuffer.begin());
+	if (currentCommand.getType() == "motion") {
+		waitForAngle = true;
 	}
-	isCommandComplete = true;
+}
+
+// Send first command in the buffer to the robot and wait for an appropriate response indicating that the command is complete.
+// Program is blocked until the command is completed. No video update is received.
+void completeNextCommand() {
+	if (commandBuffer.empty()) {
+		cout << "No commands to complete\n";
+		return;
+	}
+	startNextCommand();
+	cout << "Wait for " << currentCommand.getLastResponse() << endl;
+	for (int j = 0; j < 10; j++) {
+		if (checkCommandFinish(currentCommand.getLastResponse())) {			
+			isCommandComplete = true;
+			cout << "Command completed\n";
+			return;
+		}
+	}	
+	cout << "Command timed out\n";
+}
+
+void completeCommand(string commandLine) {
+	commandBuffer.insert(commandBuffer.begin(), commandLine);
+	completeNextCommand();
+}
+
+// Looks for QR codes in the frame and returns encoded message if QR code is found. Returns an empty string if no QR message found.
+string getQRData(ImageScanner &scanner, Mat frame) {
+	Mat grey;
+	cvtColor(frame, grey, CV_BGR2GRAY);
+	int width = frame.cols;
+	int height = frame.rows;
+	uchar *raw = (uchar *)grey.data;
+	Image image(width, height, "Y800", raw, width * height);
+	int numQRs = scanner.scan(image); // Will return 0 if no QR codes are found
+	string command = "";
+	for (SymbolIterator symbol = image.symbol_begin(); symbol != image.symbol_end(); ++symbol) {
+		command = symbol->get_data();
+		cout << "Decoded command: " << command << endl;
+	}		
+	return command;
+}
+
+// Parse commands separated by newline symbolds and add to command buffer
+void addCommandsToBuffer(string commands) {
+	stringstream commandStream(commands);
+	string commandLine;
+	while (getline(commandStream, commandLine, '\n')) {	// Get a single command from the QR code
+		commandBuffer.push_back(commandLine);
+		cout << "Added to buffer: " << commandLine << endl;
+	}
 }
 
 int main(int argc, char* argv[])
@@ -171,8 +224,8 @@ int main(int argc, char* argv[])
 		cout << "Cannot connect to the host" << endl;
 		cin.ignore(numeric_limits<streamsize>::max(), '\n');
 		return -1;
-	}	
-	completeCommand("odometrystart");
+	}		
+	waitForSocketResponse(2);
 
 	// Obtaining robot's webcam stream		
 	completeCommand("publish camera");	
@@ -184,99 +237,53 @@ int main(int argc, char* argv[])
 		return -1;
 	}	
 
-	completeCommand("left 90");
-	waitForSocketResponse(1);
-	completeCommand("left 90");
-	waitForSocketResponse(1);
-	completeCommand("left 90");
-	waitForSocketResponse(1);
-	completeCommand("left 90");
-	waitForSocketResponse(1);
+	completeCommand("odometrystart");
+	//calibrateAngle();
 
 	ImageScanner scanner;
 	scanner.set_config(ZBAR_NONE, ZBAR_CFG_ENABLE, 1);	
 
-	int cycles = 0;
-	string command = "";
-	string lastCommand = "";
-
-	Mat frame;
-	bool bSuccess;
-	int i = 15;
-	isCommandComplete = true;
-	string finalResponse = "";
-
+	int i = 0;
 	while (true) { // Wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop  
-
 		// Update video frame
-		bSuccess = cap.read(frame); // read a new frame from video  
-		if (!bSuccess) //if not success, break loop  
+		Mat frame;
+		if (!cap.read(frame)) 
 		{
 			cout << "Cannot read a frame from video stream in main loop" << endl;
 			break;
 		}
-		imshow("Oculus Prime", frame);		
+		imshow("Oculus Prime", frame);	
 
-		if (i >= 15) {		// Do command processing only every 15 iterations to avoid camera freeze
-			if (!isCommandComplete) { // Check if command was completed while waiting foriterations
-				checkCommandFinish(finalResponse);
+		// Do command processing only every 15 iterations to avoid camera freeze
+		if (i >= 15) {		
+			if (!isCommandComplete) { // Check if last command was completed while waiting for iterations
+				checkCommandFinish(currentCommand.getLastResponse());
 			} 
 			if (isCommandComplete) { 
-				if (commandBuffer.size() != 0) {
-					finalResponse = processCommand(commandBuffer[0]);
-				}
-				else { // Only look for QR codes when the robot is done performing all commands and has nothing to do
-					//waitForSocketResponse(1);
-					//cout << "All commands completed, look for QR codes now\n";
-					Mat grey;
-					cvtColor(frame, grey, CV_BGR2GRAY);
-					int width = frame.cols;
-					int height = frame.rows;
-					uchar *raw = (uchar *)grey.data;
-					Image image(width, height, "Y800", raw, width * height);
-					int numQRs = scanner.scan(image); // Will return 0 if no QR codes are found
-					//cout << "Number of QRs found " << numQRs << endl;
+				if (commandBuffer.size() != 0) { // Keep processing buffered commands until none is left
+					startNextCommand();
 				}
 			}			
 			i = 0;
-		}
+		}		
 		i++;
-		/**
-		 * Look for QR codes in the frame, decode if a code is found, and perform decoded command
-		 * If robot sees the same QR code for a while, it will not repeat the same commands while QR code is in the frame.
-		 * However, if QR code is taken away from the frame (ex. robot moves and sees the same command on a different QR code), 
-		 * last command is forgotten so the robot would perform newly seen command even if it is the same as the previos command. 
-		 */
 
-		//if (numQRs) { // Found a QR code in the frame
-		//	cycles = 0; // Reset number of cycles of seeing no QR
-		//	// Extract results of QR decoding, perform decoded command
-		//	for (SymbolIterator symbol = image.symbol_begin(); symbol != image.symbol_end(); ++symbol) {
-		//		lastCommand = command;
-		//		command = symbol->get_data();
-		//		cout << "Decoded command: " << command << endl;
-		//		cout << "Previous command was: " << lastCommand << endl;
-		//		if ((command != "") && (command != lastCommand)) {		// Do not repeat the same command over and over while the same QR code is in the camera frame					
-		//			cout << "Perform command " << command << endl;
-		//			performCommands(command);
-		//			//searchNextQR = true;
-		//		}
-		//	}			
-		//} else { // No QR detected
-		//	if (cycles >= 5) { // Reset commands if there is no QR code in the frame for 5 cycles (arbitrary value, might need to be adjusted)
-		//		lastCommand = "";
-		//		command = "";
-		//		if (searchNextQR && cycles >= 20) {
-		//			performCommands("strobeflash on 500 30\nbackward 0.1");
-		//			cycles = 0;
-		//		}
-		//	}
-		//	cycles++; // Increment cycles each time no QR is detected;			
-		//}
+		// Look for QR codes in the frame if the robot has no commands left to perform 
+		if (isCommandComplete && commandBuffer.empty()) {
+			string commands = getQRData(scanner, frame);
+			if (commands != "") {
+				addCommandsToBuffer(commands);
+				i = 15; // Jumpstart next instruction
+			}
+		}
+
+		// Exit the program if esc key is pressed for 30 seconds
 		if (waitKey(30) == 27) {
 			break;
-		}
+		}		
 	}
+	sendCommand("odometrystop");
+	waitForSocketResponse(1);
 	closeConnection();
 	cout << "Press enter to exit";
 	cin.ignore(numeric_limits<streamsize>::max(), '\n');
