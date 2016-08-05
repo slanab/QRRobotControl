@@ -30,6 +30,12 @@ int CommandTelnet::getResponseNum(){
 bool CommandTelnet::isOdometryNeeded(){
 	return expectOdometry;
 }
+bool CommandTelnet::isComplete(){
+	return isCompleted;
+}
+bool CommandTelnet::isFinalRecevied() {
+	return finalRecevied;
+}
 int CommandTelnet::getAngle(){
 	return angle;
 }
@@ -37,22 +43,40 @@ double CommandTelnet::getDistance() {
 	return distance;
 }
 
-void CommandTelnet::setResponseNum(int num) {
-	responseNum = num;
+void CommandTelnet::setCompletion(bool isComplete) {
+	isCompleted = isComplete;
 }
-void CommandTelnet::setLastResponse(string response) {
-	lastResponse = response;
+void CommandTelnet::setFinalFlag(bool isFinal) {
+	finalRecevied = isFinal;
+}
+void CommandTelnet::setOdometryNeed(bool isOdomNeeded) {
+	expectOdometry = isOdomNeeded;
+}
+void CommandTelnet::setAngleCoefficient(double coeff) {
+	angleCoefficient = coeff;
 }
 
-// Sets maximum wait time and response that should be the last useful response depending on the command sent
-void CommandTelnet::setResponseEnd(CommandTelnet& command) {
+// Command re-initialization
+void CommandTelnet::setCommand(string command) {
+	int space = command.find(" ");
+	commandFull = command + "\n";
+	commandWord = command.substr(0, space); // Command word starts at 0 until the first space	
+	parameter = command.substr(space + 1); // Parameter starts after the space and goes to the end of the command
+	isCompleted = false;
+	finalRecevied = false;
+	responseNum = 10;
+	expectOdometry = false;
+	angle = 0;
+	distance = 0;
+	type = "";
+	lastResponse = "Blablablabalbalab"; // Hopefully this string is never found
+	adjust(*this);
+}
+
+// Modifies parameters based on the command type
+void CommandTelnet::adjust(CommandTelnet& command) {
 	string commandWord = command.getCommandWord();
 	string parameter = command.getParameter();
-	command.responseNum = 10;
-	command.expectOdometry = false;
-	command.angle = 0;
-	command.distance = 0;
-	command.type = "";
 	if (commandWord == "publish" && parameter == "camera") {
 		command.lastResponse = "streaming camera";
 	} else if (commandWord == "odometrystart") {
@@ -66,38 +90,19 @@ void CommandTelnet::setResponseEnd(CommandTelnet& command) {
 		command.lastResponse = "motion stopped";
 		command.expectOdometry = true;
 		command.angle = stoi(parameter);
-		command.type = "motion";
-	}
-	else if ((commandWord == "lefttimed") || (commandWord == "righttimed")) {
+		command.type = "motion";		
+		if (angleCoefficient != 1.0) {			
+			command.angle = stoi(parameter) * command.angleCoefficient;
+			cout << "Need to add coefficient " << angleCoefficient << endl;
+			cout << "Resulting angle should be " << command.angle << endl;
+			command.parameter = command.angle;
+			command.commandFull = command.commandWord + " " + to_string(command.angle) + "\n";
+			cout << "!!!!!!!!!!!!!!!!!!! NEW COMMAND: " << commandFull << endl;
+		}
+	} else if ((commandWord == "lefttimed") || (commandWord == "righttimed")) {
 		command.lastResponse = "direction stop";
-	}
-	else if (commandWord == "strobeflash") {
+	} else if (commandWord == "strobeflash") {
 		command.lastResponse = "spotlightbrightness 0";
-	}
-	else {
-		command.lastResponse = "";		
-	}	
+	} 
 }
 
-void CommandTelnet::printCommand() {
-	cout << "Full command is: " << this->commandFull << endl;
-	cout << "Command word is: '" << this->commandWord << "' Parameter is: '" << this->parameter << "' Response to wait for: '" << this->lastResponse << "' Number of responses to wait: '" << this->responseNum << "'\n";
-	cout << "Command type is: " << this->type;
-}
-
-// TODO: Command is properly processed only if it follows "word parameter" structure. Add some error correction.
-CommandTelnet::CommandTelnet(string command) {
-	commandFull = command;
-	int space = command.find(" ");
-	commandWord = command.substr(0, space); // Command word starts at 0 until the first space	
-	parameter = command.substr(space + 1); // Parameter starts after the space and goes to the end of the command
-	setResponseEnd(*this); 
-}
-
-void CommandTelnet::setCommand(string command) {
-	int space = command.find(" ");
-	commandFull = command + "\n";	
-	commandWord = command.substr(0, space); // Command word starts at 0 until the first space	
-	parameter = command.substr(space + 1); // Parameter starts after the space and goes to the end of the command
-	setResponseEnd(*this);
-}

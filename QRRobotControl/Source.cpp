@@ -24,11 +24,6 @@ string filename = "rtmp://207.23.183.214:1935/oculusPrime/stream1";
 // Global variables
 vector<string> commandBuffer = { "left 90", "right 90" };
 CommandTelnet currentCommand;
-double coefficient = 1;
-bool searchNextQR = false;
-bool isCommandComplete = true;
-bool isFinalRecevied = false;
-bool waitForAngle = false;
 
 // Function declarations
 string waitForSocketResponse(int responseCycles);
@@ -84,6 +79,7 @@ void calibrateAngle() {
 	string response;
 	double realAngle = 0;
 	double totalAngle = 0;
+	double coefficient = 1;
 	for (int j = 0; j < 4; j++) {
 		sendCommand("left 90");
 		for (int i = 0; i < 10; i++) {
@@ -99,6 +95,8 @@ void calibrateAngle() {
 	double averageAngle = totalAngle / 4;
 	coefficient = 90.0 / averageAngle;
 	cout << "Average angle is " << averageAngle << " so coefficient is " << coefficient << endl;
+	currentCommand.setAngleCoefficient(coefficient);
+	cout << "---------------------------------------\nCalibration complete\n---------------------------------------\n\n";
 }
 
 void correctAngle(double commandAngle, double realAngle) {
@@ -121,13 +119,14 @@ void correctAngle(double commandAngle, double realAngle) {
 	}
 }
 
+// Checks if the response obtained from the robot contains words that indicate command completion
 bool checkCommandFinish(string finalResponse) {	
-	cout << "Checking if command is complete\n";
 	string response = waitForSocketResponse(1);
-	if (waitForAngle) {				
+	if (currentCommand.isOdometryNeeded()) {	
+		cout << "Need to get angle info from gyro\n";
 		if (response.find("distanceangle") != -1) {
 			cout << "Found angle response\n";
-			waitForAngle = false;
+			currentCommand.setOdometryNeed(false); // Stop waiting for odometry info after receiving angle from gyro
 			double realAngle = extractAngle(response);
 			double commandAngle = 0; // Stays 0 if motion is FW or BW
 			if (currentCommand.getCommandWord() == "left") {
@@ -140,29 +139,23 @@ bool checkCommandFinish(string finalResponse) {
 		}
 	}
 	if (response.find(finalResponse) != -1) {
-		cout << "Found final response\n";
-		isFinalRecevied = true;		
+		currentCommand.setFinalFlag(true);		
 	}
 
-	if (isFinalRecevied && !waitForAngle) { // Command is considered finished when final response is recevied and we don't need to wait for odometry angle anymore
-		isCommandComplete = true;
+	if (currentCommand.isFinalRecevied() && !currentCommand.isOdometryNeeded()) {
+		currentCommand.setCompletion(true);
 		return true;
 	}
 	return false;
 }
 
 // Send first command in the buffer to the robot and set up global variables to track progress. Do not wait for completion
-void startNextCommand() {
-	isCommandComplete = false;
-	isFinalRecevied = false;
+void startNextCommand() {		
 	string commandLine = commandBuffer[0];
 	cout << "Prforming command " << commandLine << endl;
 	currentCommand.setCommand(commandLine);
 	sendCommand(currentCommand.getCommandFull());
 	commandBuffer.erase(commandBuffer.begin());
-	if (currentCommand.getType() == "motion") {
-		waitForAngle = true;
-	}
 }
 
 // Send first command in the buffer to the robot and wait for an appropriate response indicating that the command is complete.
@@ -175,9 +168,8 @@ void completeNextCommand() {
 	startNextCommand();
 	cout << "Wait for " << currentCommand.getLastResponse() << endl;
 	for (int j = 0; j < 10; j++) {
-		if (checkCommandFinish(currentCommand.getLastResponse())) {			
-			isCommandComplete = true;
-			cout << "Command completed\n";
+		if (checkCommandFinish(currentCommand.getLastResponse())) {		
+			currentCommand.setCompletion(true);			
 			return;
 		}
 	}	
@@ -229,6 +221,7 @@ int main(int argc, char* argv[])
 
 	// Obtaining robot's webcam stream		
 	completeCommand("publish camera");	
+	cout << "Camera image is loading. Please stay patient.\n";
 	VideoCapture cap (filename);
 	if (!cap.isOpened())  // if not success, exit program
 	{
@@ -238,7 +231,7 @@ int main(int argc, char* argv[])
 	}	
 
 	completeCommand("odometrystart");
-	//calibrateAngle();
+	calibrateAngle();
 
 	ImageScanner scanner;
 	scanner.set_config(ZBAR_NONE, ZBAR_CFG_ENABLE, 1);	
@@ -256,10 +249,10 @@ int main(int argc, char* argv[])
 
 		// Do command processing only every 15 iterations to avoid camera freeze
 		if (i >= 15) {		
-			if (!isCommandComplete) { // Check if last command was completed while waiting for iterations
+			if (!currentCommand.isComplete()) { // Check if last command was completed while waiting for iterations
 				checkCommandFinish(currentCommand.getLastResponse());
 			} 
-			if (isCommandComplete) { 
+			if (currentCommand.isComplete()) {
 				if (commandBuffer.size() != 0) { // Keep processing buffered commands until none is left
 					startNextCommand();
 				}
@@ -269,7 +262,7 @@ int main(int argc, char* argv[])
 		i++;
 
 		// Look for QR codes in the frame if the robot has no commands left to perform 
-		if (isCommandComplete && commandBuffer.empty()) {
+		if (currentCommand.isComplete() && commandBuffer.empty()) {
 			string commands = getQRData(scanner, frame);
 			if (commands != "") {
 				addCommandsToBuffer(commands);
