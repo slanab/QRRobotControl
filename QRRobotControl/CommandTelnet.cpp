@@ -94,15 +94,16 @@ void CommandTelnet::adjust(CommandTelnet& command) {
 		if (angleCoefficient != 1.0) {			
 			command.angle = stoi(parameter) * command.angleCoefficient;
 			cout << "Need to add coefficient " << angleCoefficient << endl;
-			cout << "Resulting angle should be " << command.angle << endl;
-			command.parameter = command.angle;
+			cout << "Adjusted angle should be " << command.angle << endl;
 			command.commandFull = command.commandWord + " " + to_string(command.angle) + "\n";
-			cout << "!!!!!!!!!!!!!!!!!!! NEW COMMAND: " << commandFull << endl;
+			cout << "!!!!!!!!!!!!!!!!!!! COMMAND AFTER ADJUSTEMNT TO SEND: " << commandFull << endl;
 		}
 	} else if ((commandWord == "lefttimed") || (commandWord == "righttimed")) {
 		command.lastResponse = "direction stop";
 	} else if (commandWord == "strobeflash") {
 		command.lastResponse = "spotlightbrightness 0";
-	} 
+	} else if (commandWord == "nudge") {
+		command.lastResponse = "direction stop";
+	}
 }
 

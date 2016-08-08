@@ -22,7 +22,7 @@ char *IP_ADD = "207.23.183.214"; // Robot IP
 string filename = "rtmp://207.23.183.214:1935/oculusPrime/stream1";
 
 // Global variables
-vector<string> commandBuffer = { "left 90", "right 90" };
+vector<string> commandBuffer = { "right 90", "forward 1", "right 90", "forward 0.55" };
 CommandTelnet currentCommand;
 
 // Function declarations
@@ -30,6 +30,8 @@ string waitForSocketResponse(int responseCycles);
 void sendCommand(string command);
 void correctAngle(double commandAngle, double realAngle); 
 double extractAngle(string response);
+void completeNextCommand();
+void completeCommand(string commandLine);
 
 // *** Socket access ***
 string waitForSocketResponse(int responseCycles) {
@@ -75,30 +77,6 @@ double extractAngle(string response) {
 	return realAngle;
 }
 
-void calibrateAngle() {
-	string response;
-	double realAngle = 0;
-	double totalAngle = 0;
-	double coefficient = 1;
-	for (int j = 0; j < 4; j++) {
-		sendCommand("left 90");
-		for (int i = 0; i < 10; i++) {
-			response = waitForSocketResponse(1);
-			if (response.find("distanceangle 0") != -1) {
-				realAngle = extractAngle(response);
-				totalAngle = totalAngle + extractAngle(response);
-				break;
-			}
-		}
-		cout << "Sent angle 90, moved by " << realAngle << endl;
-	}
-	double averageAngle = totalAngle / 4;
-	coefficient = 90.0 / averageAngle;
-	cout << "Average angle is " << averageAngle << " so coefficient is " << coefficient << endl;
-	currentCommand.setAngleCoefficient(coefficient);
-	cout << "---------------------------------------\nCalibration complete\n---------------------------------------\n\n";
-}
-
 void correctAngle(double commandAngle, double realAngle) {
 	double angleDifference = commandAngle - realAngle;
 	cout << "Expected angle " << commandAngle << " Real angle " << realAngle << " Angle difference " << angleDifference << endl;
@@ -121,6 +99,7 @@ void correctAngle(double commandAngle, double realAngle) {
 
 // Checks if the response obtained from the robot contains words that indicate command completion
 bool checkCommandFinish(string finalResponse) {	
+	cout << "Checking if command is done\n";
 	string response = waitForSocketResponse(1);
 	if (currentCommand.isOdometryNeeded()) {	
 		cout << "Need to get angle info from gyro\n";
@@ -130,20 +109,25 @@ bool checkCommandFinish(string finalResponse) {
 			double realAngle = extractAngle(response);
 			double commandAngle = 0; // Stays 0 if motion is FW or BW
 			if (currentCommand.getCommandWord() == "left") {
-				commandAngle = currentCommand.getAngle();
+				commandAngle = stoi(currentCommand.getParameter());
 			}
 			else if (currentCommand.getCommandWord() == "right") {
-				commandAngle = 0 - currentCommand.getAngle();
+				commandAngle = 0 - stoi(currentCommand.getParameter());
 			}
 			correctAngle(commandAngle, realAngle);
+		}
+		else {
+			cout << "No angle response received\n";
 		}
 	}
 	if (response.find(finalResponse) != -1) {
 		currentCommand.setFinalFlag(true);		
+		cout << "Final response if found\n";
 	}
 
 	if (currentCommand.isFinalRecevied() && !currentCommand.isOdometryNeeded()) {
 		currentCommand.setCompletion(true);
+		cout << "Command is completed\n";
 		return true;
 	}
 	return false;
@@ -208,6 +192,33 @@ void addCommandsToBuffer(string commands) {
 	}
 }
 
+void calibrateAngle() {
+	string response;
+	double realAngle = 0;
+	double totalAngle = 0;
+	double coefficient = 1;
+	for (int j = 0; j < 4; j++) {
+		sendCommand("left 90");
+		for (int i = 0; i < 10; i++) {
+			response = waitForSocketResponse(1);
+			if (response.find("distanceangle 0") != -1) {
+				realAngle = extractAngle(response);
+				totalAngle = totalAngle + extractAngle(response);
+				break;
+			}
+		}
+		cout << "Sent angle 90, moved by " << realAngle << endl;
+	}
+	double averageAngle = totalAngle / 4;
+	coefficient = 90.0 / averageAngle;
+	cout << "Average angle is " << averageAngle << " so coefficient is " << coefficient << endl;
+	currentCommand.setAngleCoefficient(coefficient);
+	double overrotatedAngle = totalAngle - 360;
+	string command = "right " + to_string(overrotatedAngle);
+	completeCommand(command);
+	cout << "---------------------------------------\nCalibration complete\n---------------------------------------\n\n";
+}
+
 int main(int argc, char* argv[])
 {
 	// Establishing socket connection
@@ -237,7 +248,8 @@ int main(int argc, char* argv[])
 	scanner.set_config(ZBAR_NONE, ZBAR_CFG_ENABLE, 1);	
 
 	int i = 0;
-	while (true) { // Wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop  
+	int j = 0;
+	while (true) { 
 		// Update video frame
 		Mat frame;
 		if (!cap.read(frame)) 
@@ -264,13 +276,19 @@ int main(int argc, char* argv[])
 		// Look for QR codes in the frame if the robot has no commands left to perform 
 		if (currentCommand.isComplete() && commandBuffer.empty()) {
 			string commands = getQRData(scanner, frame);
-			if (commands != "") {
+			if (commands != "") { // QR commands found
+				cout << "Got commands\n";
 				addCommandsToBuffer(commands);
 				i = 15; // Jumpstart next instruction
+				j = 0;
 			}
+			else { // If no QR found for 15 cycles - try nudging for recovery
+				cout << "No QR\n";
+			}
+			
 		}
 
-		// Exit the program if esc key is pressed for 30 seconds
+		// Wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop  
 		if (waitKey(30) == 27) {
 			break;
 		}		
