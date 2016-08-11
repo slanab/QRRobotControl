@@ -20,13 +20,14 @@ public:
 	bool isComplete();
 	bool isFinalRecevied();
 	int getAngle();
-	double getDistance();
+	float getDistance();
 
 	void setCommand(string command);
 	void setCompletion(bool isCompleted);
 	void setFinalFlag(bool isFinal);
 	void setOdometryNeed(bool isOdomNeeded);
-	void setAngleCoefficient(double coeff);
+	void setAngleCoefficient(float coeff);
+	void setDistanceCoefficient(float coeff);
 
 private:
 	string commandFull;
@@ -39,8 +40,9 @@ private:
 	bool isCompleted;
 	bool finalRecevied;
 	int angle;
-	double distance;
-	double angleCoefficient;
+	float distance;
+	float angleCoefficient;
+	float distanceCoefficient;
 
 	void adjust(CommandTelnet &command);
 };

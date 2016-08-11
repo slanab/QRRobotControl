@@ -39,7 +39,7 @@ bool CommandTelnet::isFinalRecevied() {
 int CommandTelnet::getAngle(){
 	return angle;
 }
-double CommandTelnet::getDistance() {
+float CommandTelnet::getDistance() {
 	return distance;
 }
 
@@ -52,8 +52,11 @@ void CommandTelnet::setFinalFlag(bool isFinal) {
 void CommandTelnet::setOdometryNeed(bool isOdomNeeded) {
 	expectOdometry = isOdomNeeded;
 }
-void CommandTelnet::setAngleCoefficient(double coeff) {
+void CommandTelnet::setAngleCoefficient(float coeff) {
 	angleCoefficient = coeff;
+}
+void CommandTelnet::setDistanceCoefficient(float coeff) {
+	distanceCoefficient = coeff;
 }
 
 // Command re-initialization
@@ -86,17 +89,18 @@ void CommandTelnet::adjust(CommandTelnet& command) {
 		command.expectOdometry = true;
 		command.distance = stod(command.parameter);
 		command.type = "motion";
+		if (distanceCoefficient != 1.0) {
+			command.distance = stod(parameter) * command.distanceCoefficient;
+			command.commandFull = command.commandWord + " " + to_string(command.distance) + "\n";
+		}
 	} else if ((commandWord == "left") || (commandWord == "right")) {
 		command.lastResponse = "motion stopped";
 		command.expectOdometry = true;
 		command.angle = stoi(parameter);
 		command.type = "motion";		
-		if (angleCoefficient != 1.0) {			
+		if (angleCoefficient != 1.0) {		
 			command.angle = stoi(parameter) * command.angleCoefficient;
-			cout << "Need to add coefficient " << angleCoefficient << endl;
-			cout << "Adjusted angle should be " << command.angle << endl;
 			command.commandFull = command.commandWord + " " + to_string(command.angle) + "\n";
-			cout << "!!!!!!!!!!!!!!!!!!! COMMAND AFTER ADJUSTEMNT TO SEND: " << commandFull << endl;
 		}
 	} else if ((commandWord == "lefttimed") || (commandWord == "righttimed")) {
 		command.lastResponse = "direction stop";
