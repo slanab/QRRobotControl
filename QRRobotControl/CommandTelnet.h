@@ -9,32 +9,41 @@ class CommandTelnet
 public:
 	CommandTelnet();
 	~CommandTelnet();
-	CommandTelnet(string command);
 
 	string getCommandFull();
 	string getCommandWord();
 	string getParameter();	
 	string getLastResponse();
+	string getType();
 	int getResponseNum();
 	bool isOdometryNeeded();
+	bool isComplete();
+	bool isFinalRecevied();
 	int getAngle();
-	double getDistance();
+	float getDistance();
 
-	void setResponseNum(int num);
-	void setLastResponse(string response);
-
-	void printCommand(CommandTelnet& command);
+	void setCommand(string command);
+	void setCompletion(bool isCompleted);
+	void setFinalFlag(bool isFinal);
+	void setOdometryNeed(bool isOdomNeeded);
+	void setAngleCoefficient(float coeff);
+	void setDistanceCoefficient(float coeff);
 
 private:
 	string commandFull;
 	string commandWord;
 	string parameter;	
 	string lastResponse;
+	string type;
 	int responseNum;
 	bool expectOdometry;
+	bool isCompleted;
+	bool finalRecevied;
 	int angle;
-	double distance;
+	float distance;
+	float angleCoefficient;
+	float distanceCoefficient;
 
-	void setResponseEnd(CommandTelnet &command);
+	void adjust(CommandTelnet &command);
 };
 
